@@ -10,6 +10,7 @@ import { getCartItems, getCartTotal, clearCart } from '@/lib/cart-storage';
 import { saveOrder, generateOrderNumber, calculateEstimatedDelivery, calculateShippingCost, updateOrderStatus, type Order } from '@/lib/order-storage';
 import { toast } from 'sonner';
 import { useUserAuth } from '@/context/UserAuthContext';
+import { StripePaymentForm } from '@/components/checkout/StripePaymentForm';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -35,12 +36,10 @@ const Checkout = () => {
 
   useEffect(() => {
     if (!user) return;
-    const contact = user.contact?.trim();
-    if (!contact) return;
-    const emailRegex = /^(?:[a-zA-Z0-9_!#$%&'*+/=?`{|}~^.-]+)@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/u;
-    const phoneRegex = /^(?:\+?\d{1,3}[\s-]?)?(?:\d[\s-]?){10,14}$/;
-    if (emailRegex.test(contact) && !email) setEmail(contact);
-    if (phoneRegex.test(contact) && !phone) setPhone(contact.replace(/\D/g, '').slice(-10));
+    const phoneNumber = user.phoneNumber?.trim();
+    if (!phoneNumber) return;
+    const cleanPhone = phoneNumber.replace(/\D/g, '').slice(-10);
+    if (!phone) setPhone(cleanPhone);
   }, [user]);
 
   const shippingCost = pincode ? calculateShippingCost(pincode, subtotal) : 0;
@@ -74,20 +73,12 @@ const Checkout = () => {
     if (!validateForm()) return;
     const newOrderNumber = generateOrderNumber();
     setCurrentOrderNumber(newOrderNumber);
-    setCurrentQrData(generateUPIQRString(total, newOrderNumber));
     setShowPayment(true);
   };
 
-  const generateUPIQRString = (amount: number, orderNumber: string): string => {
-    const upiId = 'merchant@upi';
-    const merchantName = 'Wires & Cables Mart';
-    return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(merchantName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Order ${orderNumber}`)}`;
-  };
-
-  const handlePlaceOrder = async () => {
+  const handlePaymentSuccess = async (paymentIntentId: string) => {
     if (!isAuthenticated || !user) {
       toast.error('Please log in to place an order');
-      setIsProcessing(false);
       return;
     }
 
@@ -109,9 +100,9 @@ const Checkout = () => {
       shippingCost,
       totalAmount: total,
       status: 'pending',
-      paymentStatus: 'pending',
-      paymentMethod: 'qr_code',
-      qrCodeData: currentQrData,
+      paymentStatus: 'completed',
+      paymentMethod: 'stripe',
+      transactionId: paymentIntentId,
       createdAt: new Date().toISOString(),
       estimatedDelivery: calculateEstimatedDelivery(pincode)
     };
@@ -121,37 +112,17 @@ const Checkout = () => {
 
       try {
         await updateOrderStatus(order.id, order.status, 'completed', user.id);
-        toast.success('Thank you! We have received your confirmation.');
       } catch (e) {
         console.warn('Payment confirmation update failed', e);
       }
 
-      setTimeout(() => {
-        clearCart();
-        navigate(`/order-confirmation/${order.id}`);
-      }, 1000);
+      clearCart();
+      navigate(`/order-confirmation/${order.id}`);
     } catch (error) {
       console.error('Error placing order:', error);
       toast.error('Failed to place order. Please try again.');
       setIsProcessing(false);
     }
-  };
-
-  const QRCodeDisplay = ({ data }: { data: string }) => {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg">
-        <div className="w-64 h-64 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-lg flex items-center justify-center mb-4">
-          <div className="text-center">
-            <CreditCard className="h-16 w-16 mx-auto mb-4 text-primary" />
-            <p className="text-sm font-medium">Scan QR Code</p>
-            <p className="text-xs text-muted-foreground">Using any UPI app</p>
-          </div>
-        </div>
-        <p className="text-sm text-center text-muted-foreground max-w-xs">
-          Open GPay, PhonePe, or any UPI app and scan the QR code to complete payment
-        </p>
-      </div>
-    );
   };
 
   if (showPayment) {
@@ -168,41 +139,15 @@ const Checkout = () => {
             Back to Details
           </Button>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Complete Payment</CardTitle>
-              <CardDescription>Scan QR code to pay ₹{total.toFixed(2)}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <QRCodeDisplay data={currentQrData} />
-
-              <div className="bg-accent/20 p-4 rounded-lg space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Order Amount</span>
-                  <span className="font-medium">₹{total.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Order Number</span>
-                  <span className="font-mono font-medium">{currentOrderNumber}</span>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                <Button
-                  className="w-full bg-gradient-to-r from-primary to-secondary"
-                  onClick={handlePlaceOrder}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? 'Processing...' : 'I Have Completed Payment'}
-                </Button>
-                <p className="text-xs text-center text-muted-foreground">
-                  Click above after successfully completing the payment
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <StripePaymentForm
+            amount={total}
+            orderId={currentOrderNumber}
+            customerEmail={email}
+            customerName={name}
+            customerPhone={phone}
+            onSuccess={handlePaymentSuccess}
+            onCancel={() => setShowPayment(false)}
+          />
         </div>
       </div>
     );
@@ -324,7 +269,7 @@ const Checkout = () => {
                 </Button>
 
                 <p className="text-xs text-center text-muted-foreground">
-                  Payment via UPI QR Code only
+                  Secure payment via Stripe
                 </p>
               </CardContent>
             </Card>
