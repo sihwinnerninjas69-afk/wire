@@ -20,6 +20,8 @@ import { getAllInquiries, isSupabaseConfigured } from "@/lib/db-services";
 import { useOwnerAuth } from "@/context/OwnerAuthContext";
 import { OrdersManagement } from "@/components/dashboard/OrdersManagement";
 import { ProductsManagement } from "@/components/dashboard/ProductsManagement";
+import { PaymentSettings } from "@/components/dashboard/PaymentSettings";
+import { PaymentVerification } from "@/components/dashboard/PaymentVerification";
 
 const OwnerDashboard = () => {
   const navigate = useNavigate();
@@ -173,6 +175,14 @@ const OwnerDashboard = () => {
               <ShoppingBag className="h-4 w-4" />
               Orders
             </TabsTrigger>
+            <TabsTrigger value="payment-verification" className="gap-2">
+              <CalendarClock className="h-4 w-4" />
+              Payment Verification
+            </TabsTrigger>
+            <TabsTrigger value="payment-settings" className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Payment Settings
+            </TabsTrigger>
             <TabsTrigger value="inquiries" className="gap-2">
               <Users className="h-4 w-4" />
               Inquiries
@@ -185,6 +195,14 @@ const OwnerDashboard = () => {
 
           <TabsContent value="orders">
             <OrdersManagement />
+          </TabsContent>
+
+          <TabsContent value="payment-verification">
+            <PaymentVerification />
+          </TabsContent>
+
+          <TabsContent value="payment-settings">
+            <PaymentSettings />
           </TabsContent>
 
           <TabsContent value="inquiries" className="space-y-6">
